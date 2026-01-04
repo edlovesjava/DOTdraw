@@ -96,24 +96,18 @@ void updateDisplay() {
   for (uint8_t row = 0; row < 8; row++) {
     uint8_t rowData = canvas[row];
 
-    // Add cursor (blink or solid based on draw mode)
+    // Add cursor - always context-aware blink (works in both draw and non-draw mode)
     if (row == cursorY) {
-      if (drawMode) {
-        // In draw mode: always show cursor
-        rowData |= (1 << cursorX);
+      bool cursorPixelLit = canvas[cursorY] & (1 << cursorX);
+      if (cursorPixelLit) {
+        // Lit pixel: mostly ON, briefly OFF to show cursor
+        if (!cursorVisible) {
+          rowData &= ~(1 << cursorX);  // Turn OFF to show cursor
+        }
       } else {
-        // Not drawing: context-aware cursor blink
-        bool cursorPixelLit = canvas[cursorY] & (1 << cursorX);
-        if (cursorPixelLit) {
-          // Lit pixel: mostly ON, briefly OFF to show cursor
-          if (!cursorVisible) {
-            rowData &= ~(1 << cursorX);  // Turn OFF to show cursor
-          }
-        } else {
-          // Unlit pixel: mostly OFF, briefly ON to show cursor
-          if (cursorVisible) {
-            rowData |= (1 << cursorX);  // Turn ON to show cursor
-          }
+        // Unlit pixel: mostly OFF, briefly ON to show cursor
+        if (cursorVisible) {
+          rowData |= (1 << cursorX);  // Turn ON to show cursor
         }
       }
     }
@@ -139,11 +133,6 @@ void updateDisplay() {
 
 // Move cursor in current direction
 void moveCursor() {
-  // If in draw mode, toggle pixel at current position before moving
-  if (drawMode) {
-    canvas[cursorY] ^= (1 << cursorX);  // Toggle pixel
-  }
-
   // Move in current direction with wrap
   switch (direction) {
     case DIR_UP:
@@ -158,6 +147,11 @@ void moveCursor() {
     case DIR_RIGHT:
       cursorX = (cursorX + 1) % 8;
       break;
+  }
+
+  // If in draw mode, toggle pixel at new position (draw on cell entry)
+  if (drawMode) {
+    canvas[cursorY] ^= (1 << cursorX);
   }
 }
 
@@ -234,6 +228,10 @@ void loop() {
     // Check for chord release (toggle draw mode)
     if (chordActive && chordHoldTime < CLEAR_HOLD_TIME) {
       drawMode = !drawMode;
+      // Toggle current pixel only when entering draw mode
+      if (drawMode) {
+        canvas[cursorY] ^= (1 << cursorX);
+      }
     }
     chordActive = false;
     chordHoldTime = 0;

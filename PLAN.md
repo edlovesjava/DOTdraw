@@ -24,6 +24,12 @@
 - Applied `chordedThisPress` pattern from DOTinvaders
 - Flag set when chord detected, prevents single-button action on release, reset when all buttons released
 
+### Draw Mode Cursor and Pixel Toggle
+- [x] Cursor was not blinking in draw mode (always solid)
+- [x] Chord to enter draw mode now toggles current pixel (exit leaves pixel unchanged)
+- Cursor now uses context-aware blink in all modes
+- Entering draw mode immediately marks current position
+
 ## Future Ideas
 
 ### Button Interaction Library (DOTplatform)
