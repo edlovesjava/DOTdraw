@@ -1,0 +1,3 @@
+[submodule "DOTplatform"]
+	path = DOTplatform
+	url = https://github.com/edlovesjava/DOTplatform.git
