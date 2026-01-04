@@ -38,13 +38,15 @@ bool drawMode = false;
 bool lastLeftPressed = false;
 bool lastRightPressed = false;
 bool chordActive = false;
+bool chordedThisPress = false;  // True if chord was activated during this button hold
 uint16_t chordHoldTime = 0;
 const uint16_t CLEAR_HOLD_TIME = 2000;  // 2 seconds to clear
 
 // Timing
 uint32_t lastBlinkTime = 0;
 bool cursorVisible = true;
-const uint16_t CURSOR_BLINK_RATE = 100;  // Fast blink
+const uint16_t CURSOR_BLINK_SHORT = 100;  // Short phase duration
+const uint16_t CURSOR_BLINK_LONG = 300;   // Long phase duration
 
 // Direction indicator
 bool showDirectionBlip = false;
@@ -72,8 +74,15 @@ void sendCmd(uint8_t addr, uint8_t data) {
 void updateDisplay() {
   uint32_t now = millis();
 
-  // Handle cursor blink
-  if (now - lastBlinkTime >= CURSOR_BLINK_RATE) {
+  // Handle cursor blink - context-aware timing
+  // Unlit pixel: long OFF, short ON (flash to show cursor)
+  // Lit pixel: long ON, short OFF (dim to show cursor)
+  bool pixelLit = canvas[cursorY] & (1 << cursorX);
+  uint16_t blinkDuration = cursorVisible ?
+    (pixelLit ? CURSOR_BLINK_LONG : CURSOR_BLINK_SHORT) :
+    (pixelLit ? CURSOR_BLINK_SHORT : CURSOR_BLINK_LONG);
+
+  if (now - lastBlinkTime >= blinkDuration) {
     lastBlinkTime = now;
     cursorVisible = !cursorVisible;
   }
@@ -92,13 +101,24 @@ void updateDisplay() {
       if (drawMode) {
         // In draw mode: always show cursor
         rowData |= (1 << cursorX);
-      } else if (cursorVisible) {
-        // Not drawing: blink cursor
-        rowData |= (1 << cursorX);
+      } else {
+        // Not drawing: context-aware cursor blink
+        bool cursorPixelLit = canvas[cursorY] & (1 << cursorX);
+        if (cursorPixelLit) {
+          // Lit pixel: mostly ON, briefly OFF to show cursor
+          if (!cursorVisible) {
+            rowData &= ~(1 << cursorX);  // Turn OFF to show cursor
+          }
+        } else {
+          // Unlit pixel: mostly OFF, briefly ON to show cursor
+          if (cursorVisible) {
+            rowData |= (1 << cursorX);  // Turn ON to show cursor
+          }
+        }
       }
     }
 
-    // Add direction blip
+    // Add direction blip - toggle pixel to be visible on both lit and unlit
     if (showDirectionBlip) {
       int8_t blipX = cursorX;
       int8_t blipY = cursorY;
@@ -109,7 +129,7 @@ void updateDisplay() {
         case DIR_RIGHT: blipX = (cursorX + 1) % 8; break;
       }
       if (row == blipY) {
-        rowData |= (1 << blipX);
+        rowData ^= (1 << blipX);  // XOR to toggle - dims lit, lights unlit
       }
     }
 
@@ -200,6 +220,7 @@ void loop() {
     if (!chordActive) {
       // Chord just started
       chordActive = true;
+      chordedThisPress = true;  // Mark that we chorded during this press
       chordHoldTime = 0;
     } else {
       // Chord held - count time
@@ -218,8 +239,8 @@ void loop() {
     chordHoldTime = 0;
   }
 
-  // Handle single button releases (only if not chorded)
-  if (!chordPressed && !chordActive) {
+  // Handle single button releases (only if we didn't chord during this press)
+  if (!chordPressed && !chordedThisPress) {
     // LEFT released - rotate
     if (lastLeftPressed && !leftPressed && !rightPressed) {
       rotateDirection();
@@ -228,6 +249,11 @@ void loop() {
     if (lastRightPressed && !rightPressed && !leftPressed) {
       moveCursor();
     }
+  }
+
+  // Reset chord flag when all buttons released
+  if (!leftPressed && !rightPressed) {
+    chordedThisPress = false;
   }
 
   // Save button states
